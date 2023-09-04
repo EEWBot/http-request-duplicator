@@ -1,12 +1,16 @@
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::time::Duration;
+use std::sync::Arc;
 
+
+use clap::Parser;
+use once_cell::sync::OnceCell;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{body, Body, Request, Response, Server};
+use tokio::sync::Semaphore;
 use reqwest::Client;
 use serde::Deserialize;
-use clap::Parser;
 
 #[derive(Deserialize, Debug)]
 #[serde(transparent)]
@@ -18,7 +22,13 @@ pub struct Targets {
 struct Cli {
     #[clap(long, env)]
     listen: SocketAddr,
+
+    #[clap(long, env)]
+    #[clap(default_value_t = 2048)]
+    hard_limit: usize,
 }
+
+static HARD_LIMIT: OnceCell<Arc<Semaphore>> = OnceCell::new();
 
 async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let (mut parts, body) = req.into_parts();
@@ -44,12 +54,16 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 
     let body_bytes = bytes::Bytes::from(body_bytes);
 
+    let sem = HARD_LIMIT.get().unwrap();
+
     for target in targets.data.into_iter() {
+        let permit = Arc::clone(&sem).acquire_owned().await;
         let method = parts.method.clone();
         let headers = parts.headers.clone();
         let body_bytes = body_bytes.clone();
 
         tokio::spawn(async move {
+            let _permit = permit;
             let client = Client::new();
 
             match client
@@ -77,6 +91,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 async fn main() {
     let c = Cli::parse();
     let addr = SocketAddr::from(c.listen);
+    HARD_LIMIT.set(Arc::new(Semaphore::new(c.hard_limit))).unwrap();
 
     let make_service =
         make_service_fn(|_conn| async move { Ok::<_, Infallible>(service_fn(handle)) });

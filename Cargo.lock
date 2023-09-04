@@ -370,6 +370,7 @@ dependencies = [
  "bytes",
  "clap",
  "hyper",
+ "once_cell",
  "reqwest",
  "serde",
  "serde_json",
