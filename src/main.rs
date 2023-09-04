@@ -16,6 +16,7 @@ pub struct Targets {
 
 #[derive(Debug, Parser)]
 struct Cli {
+    #[clap(long, env)]
     listen: SocketAddr,
 }
 
