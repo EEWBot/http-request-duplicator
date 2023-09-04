@@ -13,3 +13,10 @@ clap = { version = "4.4.2", features = ["derive", "env"] }
 bytes = "1.4.0"
 reqwest = "0.11.20"
 serde_json = "1.0.105"
+
+[profile.release]
+opt-level = "z"
+debug = false
+lto = true
+strip = true
+codegen-units = 1
