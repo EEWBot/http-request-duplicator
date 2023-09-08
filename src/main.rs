@@ -226,6 +226,34 @@ async fn main() {
 
     tokio::spawn(async move {
         loop {
+            async fn process_request(
+                mut ctx: RequestContext,
+                counter: &'static Counter,
+                retry_tx: &UnboundedSender<RequestContext>,
+            ) {
+                counter.queued.fetch_sub(1, Ordering::Relaxed);
+                let limiter = LIMITER.acquire().await;
+                let retry_tx = retry_tx.clone();
+
+                tokio::spawn(async move {
+                    let _limiter = limiter;
+
+                    if request(&ctx).await.is_ok() {
+                        counter.succeed.fetch_add(1, Ordering::Relaxed);
+                    } else {
+                        counter.failed.fetch_add(1, Ordering::Relaxed);
+
+                        ctx.ttl -= 1;
+                        if ctx.ttl != 0 {
+                            println!("Retry! TTL: {}", ctx.ttl - 1);
+                            sleep(Duration::from_secs(3)).await;
+                            counter.queued.fetch_add(1, Ordering::Relaxed);
+                            retry_tx.send(ctx).unwrap();
+                        }
+                    }
+                });
+            }
+
             tokio::select! {
                 Some(_) = drop_rx.recv() => {
                     let mut n = 0;
@@ -234,53 +262,11 @@ async fn main() {
                     }
                     println!("LOW PRIORITY QUEUE {n} DROPPED!");
                 }
-                Some(mut ctx) = high_priority_rx.recv() => {
-                    COUNTERS.high_priority.queued.fetch_sub(1, Ordering::Relaxed);
-                    let limiter = LIMITER.acquire().await;
-                    let high_priority_tx = high_priority_tx.clone();
-
-                    tokio::spawn(async move {
-                        let _limiter = limiter;
-
-                        if request(&ctx).await.is_ok() {
-                            COUNTERS.high_priority.succeed.fetch_add(1, Ordering::Relaxed);
-
-                        } else {
-                            COUNTERS.high_priority.failed.fetch_add(1, Ordering::Relaxed);
-
-                            ctx.ttl -= 1;
-                            if ctx.ttl != 0 {
-                                println!("Retry! TTL: {}", ctx.ttl - 1);
-                                sleep(Duration::from_secs(3)).await;
-                                COUNTERS.high_priority.queued.fetch_add(1, Ordering::Relaxed);
-                                high_priority_tx.send(ctx).unwrap();
-                            }
-                        }
-                    });
+                Some(ctx) = high_priority_rx.recv() => {
+                    process_request(ctx, &COUNTERS.high_priority, &high_priority_tx).await;
                 }
-                Some(mut ctx) = low_priority_rx.recv(), if COUNTERS.high_priority.queued.load(Ordering::Relaxed) == 0 => {
-                    COUNTERS.low_priority.queued.fetch_sub(1, Ordering::Relaxed);
-                    let limiter = LIMITER.acquire().await;
-                    let low_priority_tx = low_priority_tx.clone();
-
-                    tokio::spawn(async move {
-                        let _limiter = limiter;
-
-                        if request(&ctx).await.is_ok() {
-                            COUNTERS.low_priority.succeed.fetch_add(1, Ordering::Relaxed);
-
-                        } else {
-                            COUNTERS.low_priority.failed.fetch_add(1, Ordering::Relaxed);
-
-                            ctx.ttl -= 1;
-                            if ctx.ttl != 0 {
-                                println!("Retry! TTL: {}", ctx.ttl - 1);
-                                sleep(Duration::from_secs(3)).await;
-                                COUNTERS.low_priority.queued.fetch_add(1, Ordering::Relaxed);
-                                low_priority_tx.send(ctx).unwrap();
-                            }
-                        }
-                    });
+                Some(ctx) = low_priority_rx.recv(), if COUNTERS.high_priority.queued.load(Ordering::Relaxed) == 0 => {
+                    process_request(ctx, &COUNTERS.low_priority, &low_priority_tx).await;
                 }
             }
         }
