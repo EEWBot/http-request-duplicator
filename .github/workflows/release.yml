@@ -13,7 +13,7 @@ jobs:
     name: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3.5.3
+      - uses: actions/checkout@v4.0.0
 
       - run: |
           sudo apt-get update -y
@@ -32,7 +32,7 @@ jobs:
           target: x86_64-pc-windows-gnu
 
       - name: cache dependencies
-        uses: Swatinem/rust-cache@v2.6.1
+        uses: Swatinem/rust-cache@v2.6.2
 
       - name: clippy check
         uses: actions-rs/clippy-check@v1.0.7
