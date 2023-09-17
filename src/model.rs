@@ -47,7 +47,7 @@ impl Channels {
         }
     }
 
-    pub const fn get_queue<'a>(&'a self, p: Priority) -> &'a UnboundedSender<RequestContext> {
+    pub const fn get_queue(&self, p: Priority) -> &UnboundedSender<RequestContext> {
         match p {
             Priority::High => &self.high_priority_queue,
             Priority::Low => &self.low_priority_queue,
@@ -116,7 +116,7 @@ impl Counters {
 }
 
 impl Counters {
-    pub const fn get<'a>(&'a self, p: Priority) -> &'a Counter {
+    pub const fn get(&self, p: Priority) -> &Counter {
         match p {
             Priority::High => &self.high_priority,
             Priority::Low => &self.low_priority,

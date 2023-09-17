@@ -1,11 +1,10 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
-use axum::response::IntoResponse;
 use axum::{
     extract::State,
     http::{header, HeaderMap, Method, StatusCode},
-    response::Html,
+    response::{Html, IntoResponse},
     routing::{get, on, post, MethodFilter},
     Json, Router,
 };
@@ -38,10 +37,10 @@ async fn duplicate(
     body: Bytes,
     priority: Priority,
 ) -> (StatusCode, Json<DuplicateResponse>) {
-    let Some(Ok(Ok(targets))) = headers.get("x-duplicate-targets").map(|v| {
-        v.to_str()
-            .map(|s| serde_json::from_str::<DuplicateTargets>(s))
-    }) else {
+    let Some(Ok(Ok(targets))) = headers
+        .get("x-duplicate-targets")
+        .map(|v| v.to_str().map(serde_json::from_str::<DuplicateTargets>))
+    else {
         return (StatusCode::BAD_REQUEST, Json(DuplicateResponse::Error));
     };
 
