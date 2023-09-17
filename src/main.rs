@@ -1,15 +1,11 @@
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use clap::Parser;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
-use once_cell::sync::OnceCell;
-use reqwest::Client;
 use tokio::sync::mpsc;
-use tokio::time::sleep;
 
 mod channel;
 mod counter;
@@ -50,7 +46,7 @@ async fn main() {
     request_processor::LIMITER.add_permits(c.parallels);
     request_processor::CLIENT
         .set(
-            Client::builder()
+            reqwest::Client::builder()
                 .timeout(Duration::from_secs(c.timeout))
                 .pool_max_idle_per_host(c.parallels)
                 .build()

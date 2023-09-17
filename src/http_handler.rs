@@ -1,5 +1,4 @@
 use std::convert::Infallible;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
@@ -69,7 +68,7 @@ pub async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             ttl: 3,
         };
 
-        COUNTERS.get(p).queued.fetch_add(1, Ordering::Relaxed);
+        COUNTERS.get(p).enqueue();
         channels.get_queue(p).send(context).unwrap();
     }
 
