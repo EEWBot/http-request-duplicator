@@ -1,15 +1,17 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
+use axum::response::IntoResponse;
 use axum::{
     extract::State,
-    http::{HeaderMap, Method, StatusCode},
+    http::{header, HeaderMap, Method, StatusCode},
     response::Html,
     routing::{get, on, post, MethodFilter},
     Json, Router,
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::model::{self, Priority};
 
@@ -90,9 +92,18 @@ async fn flush_low_priority(State(state): State<Arc<model::AppState>>) -> Status
     StatusCode::ACCEPTED
 }
 
+async fn metrics(State(state): State<Arc<model::AppState>>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        json!(state.counters).to_string(),
+    )
+}
+
 pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hyper::Error> {
     let app = Router::new()
         .route("/", get(root))
+        .route("/metrics", get(metrics))
         .route("/flush/low_priority", post(flush_low_priority))
         .route(
             "/duplicate/high_priority",

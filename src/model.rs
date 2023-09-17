@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use axum::http::{HeaderMap, Method};
 use bytes::Bytes;
+use serde::Serialize;
 use tokio::sync::mpsc::{Sender, UnboundedSender};
 
 #[derive(Debug, Clone, Copy)]
@@ -54,7 +55,7 @@ impl Channels {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct Counter {
     queued: AtomicUsize,
     succeed: AtomicUsize,
@@ -87,7 +88,7 @@ impl Counter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Debug)]
 pub struct Counters {
     high_priority: Counter,
     low_priority: Counter,
