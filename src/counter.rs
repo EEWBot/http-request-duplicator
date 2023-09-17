@@ -36,10 +36,6 @@ impl Counters {
     }
 }
 
-// impl Counter {
-//     pub const fn increment(
-// }
-
 impl Counters {
     pub const fn get(&'static self, p: Priority) -> &'static Counter {
         match p {

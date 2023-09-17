@@ -1,6 +1,6 @@
 use std::convert::Infallible;
-use std::sync::atomic::Ordering;
 use std::net::SocketAddr;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use clap::Parser;
@@ -11,11 +11,11 @@ use reqwest::Client;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 
-mod counter;
 mod channel;
+mod counter;
 mod http_handler;
-mod request_processor;
 mod model;
+mod request_processor;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
@@ -40,11 +40,11 @@ async fn main() {
     let (high_priority_tx, high_priority_rx) = mpsc::unbounded_channel();
 
     channel::CHANNELS
-        .set(channel::Channels {
-            drop_low_priority_requests: drop_tx,
-            low_priority_sock: low_priority_tx.clone(),
-            high_priority_sock: high_priority_tx.clone(),
-        })
+        .set(channel::Channels::new(
+            &high_priority_tx,
+            &low_priority_tx,
+            &drop_tx,
+        ))
         .unwrap();
 
     request_processor::LIMITER.add_permits(c.parallels);
@@ -59,12 +59,7 @@ async fn main() {
         .unwrap();
 
     tokio::spawn(async move {
-        request_processor::event_loop(
-            drop_rx,
-            high_priority_rx,
-            low_priority_rx,
-        )
-        .await;
+        request_processor::event_loop(drop_rx, high_priority_rx, low_priority_rx).await;
     });
 
     let make_service =

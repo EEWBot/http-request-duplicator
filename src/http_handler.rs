@@ -1,6 +1,6 @@
-use std::sync::{Arc, RwLock};
 use std::convert::Infallible;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
 use hyper::{body, Body, Request, Response};
@@ -26,13 +26,13 @@ pub async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         .get("x-clear-low-priority-queue")
         .map(|v| v.to_str())
     {
-        channels.drop_low_priority_requests.send(()).await.unwrap();
+        channels.flush_low_priority_queue.send(()).await.unwrap();
     }
 
-    let high_priority = matches!(
-        parts.headers.get("x-high-priority").map(|v| v.to_str()),
-        Some(Ok("true"))
-    );
+    let p = match parts.headers.get("x-high-priority").map(|v| v.to_str()) {
+        Some(Ok("true")) => Priority::High,
+        _ => Priority::Low,
+    };
 
     let Some(Ok(s)) = parts.headers.get("x-duplicate-targets").map(|v| v.to_str()) else {
         return Ok(Response::new(Body::from("Do nothing")));
@@ -55,10 +55,11 @@ pub async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 
     let body_bytes = Bytes::from(body_bytes);
 
-    let delayed_clone_objects = Arc::new(RwLock::new(channel::ReadonlySharedObjectsBetweenContexts {
-        headers: parts.headers,
-        method: parts.method,
-    }));
+    let delayed_clone_objects =
+        Arc::new(RwLock::new(channel::ReadonlySharedObjectsBetweenContexts {
+            headers: parts.headers,
+            method: parts.method,
+        }));
 
     for target in targets.data.into_iter() {
         let context = channel::RequestContext {
@@ -68,22 +69,9 @@ pub async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             ttl: 3,
         };
 
-        if high_priority {
-            COUNTERS.get(Priority::High)
-                .queued
-                .fetch_add(1, Ordering::Relaxed);
-
-            channels.high_priority_sock.send(context).unwrap();
-        } else {
-            COUNTERS.get(Priority::Low)
-                .queued
-                .fetch_add(1, Ordering::Relaxed);
-
-            channels.low_priority_sock.send(context).unwrap();
-        }
+        COUNTERS.get(p).queued.fetch_add(1, Ordering::Relaxed);
+        channels.get_queue(p).send(context).unwrap();
     }
 
     Ok(Response::new(Body::from("OK")))
 }
-
-

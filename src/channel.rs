@@ -11,9 +11,9 @@ pub static CHANNELS: OnceCell<Channels> = OnceCell::new();
 
 #[derive(Debug)]
 pub struct Channels {
-    pub high_priority_sock: UnboundedSender<RequestContext>,
-    pub low_priority_sock: UnboundedSender<RequestContext>,
-    pub drop_low_priority_requests: Sender<()>,
+    high_priority_queue: UnboundedSender<RequestContext>,
+    low_priority_queue: UnboundedSender<RequestContext>,
+    pub flush_low_priority_queue: Sender<()>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,10 +31,22 @@ pub struct RequestContext {
 }
 
 impl Channels {
-    pub const fn get_req(&'static self, p: Priority) -> &'static UnboundedSender<RequestContext> {
+    pub fn new(
+        high_priority_queue: &UnboundedSender<RequestContext>,
+        low_priority_queue: &UnboundedSender<RequestContext>,
+        flush_low_priority_queue: &Sender<()>,
+    ) -> Self {
+        Self {
+            high_priority_queue: high_priority_queue.clone(),
+            low_priority_queue: low_priority_queue.clone(),
+            flush_low_priority_queue: flush_low_priority_queue.clone(),
+        }
+    }
+
+    pub const fn get_queue(&'static self, p: Priority) -> &'static UnboundedSender<RequestContext> {
         match p {
-            Priority::High => &self.high_priority_sock,
-            Priority::Low => &self.low_priority_sock,
+            Priority::High => &self.high_priority_queue,
+            Priority::Low => &self.low_priority_queue,
         }
     }
 }

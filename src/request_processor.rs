@@ -36,12 +36,9 @@ async fn request(ctx: &RequestContext) -> Result<(), ()> {
     }
 }
 
-async fn process_request(
-    mut ctx: RequestContext,
-    p: Priority,
-) {
+async fn process_request(mut ctx: RequestContext, p: Priority) {
     let counter = COUNTERS.get(p);
-    let retry_tx = CHANNELS.get().unwrap().get_req(p);
+    let retry_tx = CHANNELS.get().unwrap().get_queue(p);
 
     counter.queued.fetch_sub(1, Ordering::Relaxed);
     let limiter = LIMITER.acquire().await;
