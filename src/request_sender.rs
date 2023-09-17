@@ -43,12 +43,12 @@ impl RequestSender {
             .await
         {
             Err(e) => {
-                println!("{} -> {}", e, ctx.target);
+                tracing::warn!("{} -> {}", e, ctx.target);
                 Err(())
             }
             Ok(resp) => {
                 if !(200..=299).contains(&resp.status().as_u16()) {
-                    println!("{} -> {}", resp.status(), ctx.target);
+                    tracing::warn!("{} -> {}", resp.status(), ctx.target);
                     return Err(());
                 }
                 Ok(())
@@ -94,7 +94,10 @@ impl RequestSender {
                         n += 1;
                     }
                     self.inner.state.counters.get(Priority::Low).resolve_n(n);
-                    println!("LOW PRIORITY QUEUE {n} FLUSHED!");
+
+                    let high = self.inner.state.counters.get(Priority::High).read_queue_count();
+                    let low = self.inner.state.counters.get(Priority::Low).read_queue_count();
+                    tracing::info!("Flush {n}@LOW [H:{high}, L:{low}]");
                 }
                 Some(ctx) = high_priority_rx.recv() => {
                     self.process_request(ctx, Priority::High).await;
