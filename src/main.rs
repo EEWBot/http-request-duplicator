@@ -11,7 +11,7 @@ mod channel;
 mod counter;
 mod http_handler;
 mod model;
-mod request_processor;
+mod request_sender;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
@@ -43,8 +43,8 @@ async fn main() {
         ))
         .unwrap();
 
-    request_processor::LIMITER.add_permits(c.parallels);
-    request_processor::CLIENT
+    request_sender::LIMITER.add_permits(c.parallels);
+    request_sender::CLIENT
         .set(
             reqwest::Client::builder()
                 .timeout(Duration::from_secs(c.timeout))
@@ -55,7 +55,7 @@ async fn main() {
         .unwrap();
 
     tokio::spawn(async move {
-        request_processor::event_loop(drop_rx, high_priority_rx, low_priority_rx).await;
+        request_sender::event_loop(drop_rx, high_priority_rx, low_priority_rx).await;
     });
 
     let make_service =
