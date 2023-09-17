@@ -1,91 +1,107 @@
+use std::sync::Arc;
 use std::time::Duration;
 
-use once_cell::sync::OnceCell;
 use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
-use crate::channel::{RequestContext, CHANNELS};
-use crate::counter::COUNTERS;
-use crate::model::Priority;
+use crate::model::{self, Priority};
 
-pub static LIMITER: Semaphore = Semaphore::const_new(0);
-pub static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
+struct RequestSenderInner {
+    client: reqwest::Client,
+    limiter: Arc<Semaphore>,
+    state: Arc<model::AppState>,
+}
 
-async fn request(ctx: &RequestContext) -> Result<(), ()> {
-    let client = CLIENT.get().unwrap();
+#[derive(Clone)]
+pub struct RequestSender {
+    inner: Arc<RequestSenderInner>,
+}
 
-    // delayed clone
-    let shared = ctx.readonly_objects.read().unwrap().clone();
-
-    match client
-        .request(shared.method, &ctx.target)
-        .headers(shared.headers)
-        .body(reqwest::Body::from(ctx.body.clone()))
-        .send()
-        .await
-    {
-        Err(e) => {
-            println!("{} -> {}", e, ctx.target);
-            Err(())
-        }
-        Ok(resp) => {
-            if !(200..=299).contains(&resp.status().as_u16()) {
-                println!("{} -> {}", resp.status(), ctx.target);
-                return Err(());
-            }
-            Ok(())
+impl RequestSender {
+    pub fn new(state: Arc<model::AppState>, client: reqwest::Client, parallels: usize) -> Self {
+        Self {
+            inner: Arc::new(RequestSenderInner {
+                state,
+                client,
+                limiter: Arc::new(Semaphore::new(parallels)),
+            }),
         }
     }
-}
 
-async fn process_request(mut ctx: RequestContext, p: Priority) {
-    let counter = COUNTERS.get(p);
-    let retry_tx = CHANNELS.get().unwrap().get_queue(p);
+    async fn request(&self, ctx: &model::RequestContext) -> Result<(), ()> {
+        // delayed clone
+        let shared = ctx.readonly_objects.read().unwrap().clone();
 
-    counter.resolve();
-    let limiter = LIMITER.acquire().await;
-    let retry_tx = retry_tx.clone();
-
-    tokio::spawn(async move {
-        let _limiter = limiter;
-
-        if request(&ctx).await.is_ok() {
-            counter.succeed();
-        } else {
-            ctx.ttl -= 1;
-
-            if ctx.ttl != 0 {
-                sleep(Duration::from_secs(3)).await;
-                counter.enqueue();
-                retry_tx.send(ctx).unwrap();
-            } else {
-                counter.failed();
+        match self
+            .inner
+            .client
+            .request(shared.method, &ctx.target)
+            .headers(shared.headers)
+            .body(reqwest::Body::from(ctx.body.clone()))
+            .send()
+            .await
+        {
+            Err(e) => {
+                println!("{} -> {}", e, ctx.target);
+                Err(())
+            }
+            Ok(resp) => {
+                if !(200..=299).contains(&resp.status().as_u16()) {
+                    println!("{} -> {}", resp.status(), ctx.target);
+                    return Err(());
+                }
+                Ok(())
             }
         }
-    });
-}
+    }
 
-pub async fn event_loop(
-    mut flush_rx: Receiver<()>,
-    mut high_priority: UnboundedReceiver<RequestContext>,
-    mut low_priority: UnboundedReceiver<RequestContext>,
-) {
-    loop {
-        tokio::select! {
-            Some(_) = flush_rx.recv() => {
-                let mut n = 0;
-                while low_priority.try_recv().is_ok() {
-                    n += 1;
+    async fn process_request(&self, mut ctx: model::RequestContext, p: Priority) {
+        self.inner.state.counters.get(p).resolve();
+        let permit = self.inner.limiter.clone().acquire_owned().await;
+        let cloned_self = self.clone();
+
+        tokio::spawn(async move {
+            if cloned_self.request(&ctx).await.is_ok() {
+                cloned_self.inner.state.counters.get(p).succeed();
+            } else {
+                ctx.ttl -= 1;
+
+                if ctx.ttl != 0 {
+                    sleep(Duration::from_secs(3)).await;
+                    cloned_self.inner.state.counters.get(p).enqueue();
+                    cloned_self.inner.state.channels.get_queue(p).send(ctx).unwrap();
+                } else {
+                    cloned_self.inner.state.counters.get(p).failed();
                 }
-                COUNTERS.get(Priority::Low).resolve_n(n);
-                println!("LOW PRIORITY QUEUE {n} FLUSHED!");
             }
-            Some(ctx) = high_priority.recv() => {
-                process_request(ctx, Priority::High).await;
-            }
-            Some(ctx) = low_priority.recv(), if COUNTERS.get(Priority::High).is_queue_empty()  => {
-                process_request(ctx, Priority::Low).await;
+
+            drop(permit);
+        });
+    }
+
+    pub async fn event_loop(
+        &self,
+        mut flush_rx: Receiver<()>,
+        mut high_priority_rx: UnboundedReceiver<model::RequestContext>,
+        mut low_priority_rx: UnboundedReceiver<model::RequestContext>,
+    ) {
+        loop {
+            tokio::select! {
+                Some(_) = flush_rx.recv() => {
+                    let mut n = 0;
+                    while low_priority_rx.try_recv().is_ok() {
+                        n += 1;
+                    }
+                    self.inner.state.counters.get(Priority::Low).resolve_n(n);
+                    println!("LOW PRIORITY QUEUE {n} FLUSHED!");
+                }
+                Some(ctx) = high_priority_rx.recv() => {
+                    self.process_request(ctx, Priority::High).await;
+                }
+                Some(ctx) = low_priority_rx.recv(), if self.inner.state.counters.get(Priority::High).is_queue_empty() => {
+                    self.process_request(ctx, Priority::Low).await;
+                }
             }
         }
     }

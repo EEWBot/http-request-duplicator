@@ -1,76 +1,108 @@
-use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
+use axum::{
+    extract::State,
+    http::{HeaderMap, Method, StatusCode},
+    response::Html,
+    routing::{get, on, post, MethodFilter},
+    Json, Router,
+};
 use bytes::Bytes;
-use hyper::{body, Body, Request, Response};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::channel;
-use crate::counter::COUNTERS;
-use crate::model::Priority;
+use crate::model::{self, Priority};
+
+async fn root() -> Html<&'static str> {
+    Html("<h1>Http Request Duplicator</h1>")
+}
 
 #[derive(Deserialize, Debug)]
 #[serde(transparent)]
-struct Targets {
+struct DuplicateTargets {
     data: Vec<String>,
 }
 
-pub async fn handle(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let (mut parts, body) = req.into_parts();
+#[derive(Serialize, Debug)]
+enum DuplicateResponse {
+    Ok,
+    Error,
+}
 
-    let channels = channel::CHANNELS.get().unwrap();
-
-    if let Some(Ok("true")) = parts
-        .headers
-        .get("x-clear-low-priority-queue")
-        .map(|v| v.to_str())
-    {
-        channels.flush_low_priority_queue.send(()).await.unwrap();
-    }
-
-    let p = match parts.headers.get("x-high-priority").map(|v| v.to_str()) {
-        Some(Ok("true")) => Priority::High,
-        _ => Priority::Low,
+async fn duplicate(
+    state: Arc<model::AppState>,
+    method: Method,
+    mut headers: HeaderMap,
+    body: Bytes,
+    priority: Priority,
+) -> (StatusCode, Json<DuplicateResponse>) {
+    let Some(Ok(Ok(targets))) = headers.get("x-duplicate-targets").map(|v| {
+        v.to_str()
+            .map(|s| serde_json::from_str::<DuplicateTargets>(s))
+    }) else {
+        return (StatusCode::BAD_REQUEST, Json(DuplicateResponse::Error));
     };
 
-    let Some(Ok(s)) = parts.headers.get("x-duplicate-targets").map(|v| v.to_str()) else {
-        return Ok(Response::new(Body::from("Do nothing")));
-    };
-
-    let Ok(targets) = serde_json::from_str::<Targets>(s) else {
-        return Ok(Response::new(Body::from(
-            "Failed to parse x-duplicate-targets",
-        )));
-    };
-
-    let Ok(body_bytes) = body::to_bytes(body).await.map(|v| v.to_vec()) else {
-        return Ok(Response::new(Body::from("Failed to read body")));
-    };
-
-    parts.headers.remove("x-duplicate-targets");
-    parts.headers.remove("x-clear-low-priority-queue");
-    parts.headers.remove("x-high-priority");
-    parts.headers.remove("host");
-
-    let body_bytes = Bytes::from(body_bytes);
+    headers.remove("x-duplicate-targets");
+    headers.remove("host");
 
     let delayed_clone_objects =
-        Arc::new(RwLock::new(channel::ReadonlySharedObjectsBetweenContexts {
-            headers: parts.headers,
-            method: parts.method,
+        Arc::new(RwLock::new(model::ReadonlySharedObjectsBetweenContexts {
+            headers,
+            method,
         }));
 
     for target in targets.data.into_iter() {
-        let context = channel::RequestContext {
+        let context = model::RequestContext {
             target,
             readonly_objects: Arc::clone(&delayed_clone_objects),
-            body: body_bytes.clone(),
+            body: body.clone(),
             ttl: 3,
         };
 
-        COUNTERS.get(p).enqueue();
-        channels.get_queue(p).send(context).unwrap();
+        state.counters.get(priority).enqueue();
+        state.channels.get_queue(priority).send(context).unwrap();
     }
 
-    Ok(Response::new(Body::from("OK")))
+    (StatusCode::ACCEPTED, Json(DuplicateResponse::Ok))
+}
+
+async fn duplicate_low_priority(
+    State(state): State<Arc<model::AppState>>,
+    method: Method,
+    headers: HeaderMap,
+    body: Bytes,
+) -> (StatusCode, Json<DuplicateResponse>) {
+    duplicate(state, method, headers, body, Priority::Low).await
+}
+
+async fn duplicate_high_priority(
+    State(state): State<Arc<model::AppState>>,
+    method: Method,
+    headers: HeaderMap,
+    body: Bytes,
+) -> (StatusCode, Json<DuplicateResponse>) {
+    duplicate(state, method, headers, body, Priority::High).await
+}
+
+async fn flush_low_priority(State(state): State<Arc<model::AppState>>) -> StatusCode {
+    let _ = state.channels.flush_low_priority_queue.send(()).await;
+    StatusCode::ACCEPTED
+}
+
+pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hyper::Error> {
+    let app = Router::new()
+        .route("/", get(root))
+        .route("/flush/low_priority", post(flush_low_priority))
+        .route(
+            "/duplicate/high_priority",
+            on(MethodFilter::all(), duplicate_high_priority),
+        )
+        .route(
+            "/duplicate/low_priority",
+            on(MethodFilter::all(), duplicate_low_priority),
+        )
+        .with_state(state);
+
+    axum::Server::bind(s).serve(app.into_make_service()).await
 }
