@@ -86,6 +86,10 @@ impl Counter {
     pub fn is_queue_empty(&self) -> bool {
         self.queued.load(Ordering::Relaxed) == 0
     }
+
+    pub fn read_queue_count(&self) -> usize {
+        self.queued.load(Ordering::Relaxed)
+    }
 }
 
 #[derive(Serialize, Debug)]

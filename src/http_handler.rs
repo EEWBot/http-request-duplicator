@@ -54,6 +54,10 @@ async fn duplicate(
             method,
         }));
 
+    let count = targets.data.len();
+    let high = state.counters.get(Priority::High).read_queue_count();
+    let low = state.counters.get(Priority::Low).read_queue_count();
+
     for target in targets.data.into_iter() {
         let context = model::RequestContext {
             target,
@@ -66,6 +70,7 @@ async fn duplicate(
         state.channels.get_queue(priority).send(context).unwrap();
     }
 
+    tracing::info!("Enqueue {count}@{priority:?} [H:{high}, L:{low}]");
     (StatusCode::ACCEPTED, Json(DuplicateResponse::Ok))
 }
 
