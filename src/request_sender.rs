@@ -52,45 +52,52 @@ impl RequestSender {
         {
             Err(e) => Err(RequestError::ConnectionError(e)),
             Ok(resp) => {
-                if !(200..=299).contains(&resp.status().as_u16()) {
-                    Err(RequestError::HttpError(resp.status()))
+                let status = resp.status();
+                if status.is_success() {
+                    Ok(status)
                 } else {
-                    Ok(resp.status())
+                    Err(RequestError::HttpError(status))
                 }
             }
         }
     }
 
-    async fn process_request(&self, mut ctx: model::RequestContext, p: Priority) {
+    async fn retry(&self, mut ctx: model::RequestContext, p: Priority) {
+        ctx.ttl -= 1;
+
+        if ctx.ttl != 0 {
+            tracing::warn!("retring {}...", ctx.target);
+            sleep(Duration::from_secs(3)).await;
+            self.inner.state.counters.get(p).enqueue();
+            self.inner.state.channels.get_queue(p).send(ctx).unwrap();
+        } else {
+            self.inner.state.counters.get(p).failed();
+        }
+    }
+
+    async fn process_request(&self, ctx: model::RequestContext, p: Priority) {
         self.inner.state.counters.get(p).resolve();
         let permit = self.inner.limiter.clone().acquire_owned().await;
         let cloned_self = self.clone();
 
         tokio::spawn(async move {
             match cloned_self.request(&ctx).await {
-                Ok(_) => cloned_self.inner.state.counters.get(p).succeed(),
+                Ok(status) => {
+                    tracing::debug!("{status} when {}", ctx.target);
+                    cloned_self.inner.state.counters.get(p).succeed();
+                }
                 Err(RequestError::HttpError(status)) => {
-                    tracing::warn!("{status} from {}", ctx.target);
-                    cloned_self.inner.state.counters.get(p).failed();
+                    tracing::warn!("{status} when {}", ctx.target);
+
+                    if status.is_client_error() {
+                        cloned_self.inner.state.counters.get(p).failed();
+                    } else {
+                        cloned_self.retry(ctx, p).await;
+                    }
                 }
                 Err(RequestError::ConnectionError(e)) => {
-                    tracing::warn!("{e} from {}", ctx.target);
-                    ctx.ttl -= 1;
-
-                    if ctx.ttl != 0 {
-                        tracing::warn!("retring {}...", ctx.target);
-                        sleep(Duration::from_secs(3)).await;
-                        cloned_self.inner.state.counters.get(p).enqueue();
-                        cloned_self
-                            .inner
-                            .state
-                            .channels
-                            .get_queue(p)
-                            .send(ctx)
-                            .unwrap();
-                    } else {
-                        cloned_self.inner.state.counters.get(p).failed();
-                    }
+                    tracing::warn!("{e} when {}", ctx.target);
+                    cloned_self.retry(ctx, p).await;
                 }
             }
 
