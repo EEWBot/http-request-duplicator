@@ -36,6 +36,7 @@ async fn main() {
     let state = Arc::new(model::AppState {
         channels: model::Channels::new(&high_priority_tx, &low_priority_tx, &drop_tx),
         counters: model::Counters::new(),
+        log: model::Log::new(),
     });
 
     let sender = request_sender::RequestSender::new(

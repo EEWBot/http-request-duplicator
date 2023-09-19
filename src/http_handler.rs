@@ -104,10 +104,19 @@ async fn metrics(State(state): State<Arc<model::AppState>>) -> impl IntoResponse
     )
 }
 
+async fn target_metrics(State(state): State<Arc<model::AppState>>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        json!(state.log.read().await).to_string(),
+    )
+}
+
 pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hyper::Error> {
     let app = Router::new()
         .route("/", get(root))
         .route("/metrics", get(metrics))
+        .route("/target_metrics", get(target_metrics))
         .route("/flush/low_priority", post(flush_low_priority))
         .route(
             "/duplicate/high_priority",

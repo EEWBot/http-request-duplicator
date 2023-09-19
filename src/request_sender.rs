@@ -53,6 +53,7 @@ impl RequestSender {
             Err(e) => Err(RequestError::ConnectionError(e)),
             Ok(resp) => {
                 let status = resp.status();
+                self.inner.state.log.append(resp.status().into(), &ctx.target).await;
                 if status.is_success() {
                     Ok(status)
                 } else {

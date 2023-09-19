@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock};
@@ -124,7 +125,29 @@ impl Counters {
     }
 }
 
+pub struct Log {
+    data: tokio::sync::RwLock<HashMap<u16, HashSet<String>>>,
+}
+
+impl Log {
+    pub fn new() -> Self {
+        Self { data: tokio::sync::RwLock::new(HashMap::new()) }
+    }
+
+    pub async fn append(&self, status_code: u16, target: &str) {
+        let mut map = self.data.write().await;
+        let mut value = map.remove(&status_code).unwrap_or(HashSet::new());
+        value.insert(target.to_owned());
+        map.insert(status_code, value);
+    }
+
+    pub async fn read(&self) -> HashMap<u16, HashSet<String>> {
+        self.data.read().await.clone()
+    }
+}
+
 pub struct AppState {
     pub channels: Channels,
     pub counters: Counters,
+    pub log: Log,
 }
