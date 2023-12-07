@@ -1,4 +1,4 @@
-FROM rust:1.74.0-bookworm as builder
+FROM rust:1.74.1-bookworm as builder
 
 WORKDIR /usr/src/http-request-duplicator
 COPY . .
