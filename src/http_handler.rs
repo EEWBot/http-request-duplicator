@@ -5,7 +5,7 @@ use axum::{
     extract::State,
     http::{header, HeaderMap, Method, StatusCode},
     response::{Html, IntoResponse},
-    routing::{get, on, post, MethodFilter},
+    routing::{any, get, post},
     Json, Router,
 };
 use bytes::Bytes;
@@ -118,14 +118,8 @@ pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hype
         .route("/metrics", get(metrics))
         .route("/target_metrics", get(target_metrics))
         .route("/flush/low_priority", post(flush_low_priority))
-        .route(
-            "/duplicate/high_priority",
-            on(MethodFilter::all(), duplicate_high_priority),
-        )
-        .route(
-            "/duplicate/low_priority",
-            on(MethodFilter::all(), duplicate_low_priority),
-        )
+        .route("/duplicate/high_priority", any(duplicate_high_priority))
+        .route("/duplicate/low_priority", any(duplicate_low_priority))
         .with_state(state);
 
     axum::Server::bind(s).serve(app.into_make_service()).await
