@@ -34,6 +34,10 @@ jobs:
       - name: cache dependencies
         uses: Swatinem/rust-cache@v2.7.1
 
+      - name: Set environment
+        run: |
+           echo RUSTFLAGS='--cfg reqwest_unstable'  >> "$GITHUB_ENV"
+
       - name: clippy check
         uses: actions-rs/clippy-check@v1.0.7
         with:
@@ -58,8 +62,8 @@ jobs:
           command: test
 
       - run: |
-          RUSTFLAGS='--cfg reqwest_unstable' cargo build --release --target x86_64-unknown-linux-gnu
-          RUSTFLAGS='--cfg reqwest_unstable' cargo build --release --target x86_64-pc-windows-gnu
+          cargo build --release --target x86_64-unknown-linux-gnu
+          cargo build --release --target x86_64-pc-windows-gnu
           mkdir http-request-duplicator
           cargo license \
             --authors \
