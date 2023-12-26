@@ -46,7 +46,7 @@ async fn main() {
             .pool_max_idle_per_host(c.parallels)
             .build()
             .unwrap(),
-        c.parallels,
+        c.parallels * 2,
     );
 
     tokio::spawn(async move {
