@@ -48,7 +48,7 @@ async fn main() {
             .brotli(true)
             .build()
             .unwrap(),
-        c.parallels,
+        c.parallels * 2,
     );
 
     tokio::spawn(async move {
