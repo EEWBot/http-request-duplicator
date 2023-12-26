@@ -44,9 +44,11 @@ async fn main() {
         reqwest::Client::builder()
             .timeout(Duration::from_secs(c.timeout))
             .pool_max_idle_per_host(c.parallels)
+            .http3_prior_knowledge()
+            .brotli(true)
             .build()
             .unwrap(),
-        c.parallels * 2,
+        c.parallels,
     );
 
     tokio::spawn(async move {
