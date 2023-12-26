@@ -150,4 +150,5 @@ pub struct AppState {
     pub channels: Channels,
     pub counters: Counters,
     pub log: Log,
+    pub retry_count: usize,
 }

@@ -15,12 +15,20 @@ pub struct Cli {
     pub listen: SocketAddr,
 
     #[clap(long, env)]
-    #[clap(default_value_t = 128)]
+    #[clap(default_value_t = 4)]
     pub pool: usize,
 
     #[clap(long, env)]
-    #[clap(default_value_t = 128)]
+    #[clap(default_value_t = 1024)]
     pub limiter: usize,
+
+    #[clap(long, env)]
+    #[clap(default_value_t = 3)]
+    pub retry_count: usize,
+
+    #[clap(long, env)]
+    #[clap(default_value_t = 1)]
+    pub retry_delay: u64,
 
     #[clap(long, env)]
     #[clap(default_value_t = 5)]
@@ -41,6 +49,7 @@ async fn main() {
         channels: model::Channels::new(&high_priority_tx, &low_priority_tx, &drop_tx),
         counters: model::Counters::new(),
         log: model::Log::new(),
+        retry_count: c.retry_count,
     });
 
     let sender = request_sender::RequestSender::new(
@@ -53,6 +62,7 @@ async fn main() {
             .build()
             .unwrap(),
         c.limiter,
+        c.retry_delay,
     );
 
     tokio::spawn(async move {

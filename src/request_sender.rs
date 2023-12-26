@@ -11,6 +11,7 @@ struct RequestSenderInner {
     client: reqwest::Client,
     limiter: Arc<Semaphore>,
     state: Arc<model::AppState>,
+    retry_delay: u64,
 }
 
 #[derive(Clone)]
@@ -24,12 +25,13 @@ enum RequestError {
 }
 
 impl RequestSender {
-    pub fn new(state: Arc<model::AppState>, client: reqwest::Client, parallels: usize) -> Self {
+    pub fn new(state: Arc<model::AppState>, client: reqwest::Client, parallels: usize, retry_delay: u64) -> Self {
         Self {
             inner: Arc::new(RequestSenderInner {
                 state,
                 client,
                 limiter: Arc::new(Semaphore::new(parallels)),
+                retry_delay,
             }),
         }
     }
@@ -68,7 +70,7 @@ impl RequestSender {
 
         if ctx.ttl != 0 {
             tracing::warn!("retring {}...", ctx.target);
-            sleep(Duration::from_secs(3)).await;
+            sleep(Duration::from_secs(self.inner.retry_delay)).await;
             self.inner.state.counters.get(p).enqueue();
             self.inner.state.channels.get_queue(p).send(ctx).unwrap();
         } else {

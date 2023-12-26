@@ -62,7 +62,7 @@ async fn duplicate(
             target,
             readonly_objects: Arc::clone(&delayed_clone_objects),
             body: body.clone(),
-            ttl: 3,
+            ttl: state.retry_count,
         };
 
         state.counters.get(priority).enqueue();
