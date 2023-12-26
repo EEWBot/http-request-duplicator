@@ -57,18 +57,9 @@ jobs:
         with:
           command: test
 
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: build
-          args: --release --target x86_64-unknown-linux-gnu
-
-      - uses: actions-rs/cargo@v1.0.3
-        with:
-          command: build
-          args: --release --target x86_64-pc-windows-gnu
-
       - run: |
-          RUSTFLAGS='--cfg reqwest_unstable'
+          RUSTFLAGS='--cfg reqwest_unstable' cargo build --release --target x86_64-unknown-linux-gnu
+          RUSTFLAGS='--cfg reqwest_unstable' cargo build --release --target x86_64-pc-windows-gnu
           mkdir http-request-duplicator
           cargo license \
             --authors \
