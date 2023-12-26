@@ -16,7 +16,11 @@ pub struct Cli {
 
     #[clap(long, env)]
     #[clap(default_value_t = 128)]
-    pub parallels: usize,
+    pub pool: usize,
+
+    #[clap(long, env)]
+    #[clap(default_value_t = 128)]
+    pub limiter: usize,
 
     #[clap(long, env)]
     #[clap(default_value_t = 5)]
@@ -43,12 +47,12 @@ async fn main() {
         state.clone(),
         reqwest::Client::builder()
             .timeout(Duration::from_secs(c.timeout))
-            .pool_max_idle_per_host(c.parallels)
+            .pool_max_idle_per_host(c.pool)
             .http3_prior_knowledge()
             .brotli(true)
             .build()
             .unwrap(),
-        c.parallels * 2,
+        c.limiter,
     );
 
     tokio::spawn(async move {
