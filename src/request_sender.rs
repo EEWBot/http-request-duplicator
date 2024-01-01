@@ -57,6 +57,7 @@ impl RequestSender {
 
         use std::sync::atomic::Ordering;
         let n = self.inner.client_selection.fetch_add(1, Ordering::Relaxed);
+        let n = n % self.inner.clients.len();
 
         match self.inner.clients[n]
             .request(shared.method, &ctx.target)
