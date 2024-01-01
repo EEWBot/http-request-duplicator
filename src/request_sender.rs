@@ -1,3 +1,4 @@
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,7 +9,8 @@ use tokio::time::sleep;
 use crate::model::{self, Priority};
 
 struct RequestSenderInner {
-    client: reqwest::Client,
+    clients: Vec<reqwest::Client>,
+    client_selection: AtomicUsize,
     limiter: Arc<Semaphore>,
     state: Arc<model::AppState>,
     retry_delay: u64,
@@ -25,11 +27,21 @@ enum RequestError {
 }
 
 impl RequestSender {
-    pub fn new(state: Arc<model::AppState>, client: reqwest::Client, parallels: usize, retry_delay: u64) -> Self {
+    pub fn new(
+        state: Arc<model::AppState>,
+        clients: Vec<reqwest::Client>,
+        parallels: usize,
+        retry_delay: u64,
+    ) -> Self {
+        if clients.len() == 0 {
+            panic!();
+        }
+
         Self {
             inner: Arc::new(RequestSenderInner {
                 state,
-                client,
+                client_selection: AtomicUsize::new(0),
+                clients,
                 limiter: Arc::new(Semaphore::new(parallels)),
                 retry_delay,
             }),
@@ -43,9 +55,10 @@ impl RequestSender {
         // delayed clone
         let shared = ctx.readonly_objects.read().unwrap().clone();
 
-        match self
-            .inner
-            .client
+        use std::sync::atomic::Ordering;
+        let n = self.inner.client_selection.fetch_add(1, Ordering::Relaxed);
+
+        match self.inner.clients[n]
             .request(shared.method, &ctx.target)
             .headers(shared.headers)
             .body(reqwest::Body::from(ctx.body.clone()))
@@ -55,7 +68,11 @@ impl RequestSender {
             Err(e) => Err(RequestError::ConnectionError(e)),
             Ok(resp) => {
                 let status = resp.status();
-                self.inner.state.log.append(resp.status().into(), &ctx.target).await;
+                self.inner
+                    .state
+                    .log
+                    .append(resp.status().into(), &ctx.target)
+                    .await;
                 if status.is_success() {
                     Ok(status)
                 } else {

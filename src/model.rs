@@ -131,7 +131,9 @@ pub struct Log {
 
 impl Log {
     pub fn new() -> Self {
-        Self { data: tokio::sync::RwLock::new(HashMap::new()) }
+        Self {
+            data: tokio::sync::RwLock::new(HashMap::new()),
+        }
     }
 
     pub async fn append(&self, status_code: u16, target: &str) {

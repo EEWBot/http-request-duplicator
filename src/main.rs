@@ -35,6 +35,17 @@ pub struct Cli {
     pub timeout: u64,
 }
 
+
+fn create_client(timeout: u64) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout))
+        .http3_prior_knowledge()
+        .brotli(true)
+        .build()
+        .unwrap()
+}
+
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -54,13 +65,7 @@ async fn main() {
 
     let sender = request_sender::RequestSender::new(
         state.clone(),
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(c.timeout))
-            .pool_max_idle_per_host(c.pool)
-            .http3_prior_knowledge()
-            .brotli(true)
-            .build()
-            .unwrap(),
+        (0..c.pool).map(|_| create_client(c.timeout)).collect(),
         c.limiter,
         c.retry_delay,
     );
