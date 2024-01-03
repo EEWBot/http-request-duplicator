@@ -91,11 +91,6 @@ async fn duplicate_high_priority(
     duplicate(state, method, headers, body, Priority::High).await
 }
 
-async fn flush_low_priority(State(state): State<Arc<model::AppState>>) -> StatusCode {
-    let _ = state.channels.flush_low_priority_queue.send(()).await;
-    StatusCode::ACCEPTED
-}
-
 async fn metrics(State(state): State<Arc<model::AppState>>) -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -117,7 +112,6 @@ pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hype
         .route("/", get(root))
         .route("/metrics", get(metrics))
         .route("/target_metrics", get(target_metrics))
-        .route("/flush/low_priority", post(flush_low_priority))
         .route("/duplicate/high_priority", any(duplicate_high_priority))
         .route("/duplicate/low_priority", any(duplicate_low_priority))
         .with_state(state);

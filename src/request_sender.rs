@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
@@ -128,23 +128,11 @@ impl RequestSender {
 
     pub async fn event_loop(
         &self,
-        mut flush_rx: Receiver<()>,
         mut high_priority_rx: UnboundedReceiver<model::RequestContext>,
         mut low_priority_rx: UnboundedReceiver<model::RequestContext>,
     ) {
         loop {
             tokio::select! {
-                Some(_) = flush_rx.recv() => {
-                    let mut n = 0;
-                    while low_priority_rx.try_recv().is_ok() {
-                        n += 1;
-                    }
-                    self.inner.state.counters.get(Priority::Low).resolve_n(n);
-
-                    let high = self.inner.state.counters.get(Priority::High).read_queue_count();
-                    let low = self.inner.state.counters.get(Priority::Low).read_queue_count();
-                    tracing::info!("Flush {n}@LOW [H:{high}, L:{low}]");
-                }
                 Some(ctx) = high_priority_rx.recv() => {
                     self.process_request(ctx, Priority::High).await;
                 }

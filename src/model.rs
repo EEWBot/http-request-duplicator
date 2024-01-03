@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock};
 use axum::http::{HeaderMap, Method};
 use bytes::Bytes;
 use serde::Serialize;
-use tokio::sync::mpsc::{Sender, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Priority {
@@ -32,19 +32,16 @@ pub struct RequestContext {
 pub struct Channels {
     high_priority_queue: UnboundedSender<RequestContext>,
     low_priority_queue: UnboundedSender<RequestContext>,
-    pub flush_low_priority_queue: Sender<()>,
 }
 
 impl Channels {
     pub fn new(
         high_priority_queue: &UnboundedSender<RequestContext>,
         low_priority_queue: &UnboundedSender<RequestContext>,
-        flush_low_priority_queue: &Sender<()>,
     ) -> Self {
         Self {
             high_priority_queue: high_priority_queue.clone(),
             low_priority_queue: low_priority_queue.clone(),
-            flush_low_priority_queue: flush_low_priority_queue.clone(),
         }
     }
 

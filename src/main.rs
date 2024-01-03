@@ -52,12 +52,11 @@ async fn main() {
 
     let c = Cli::parse();
 
-    let (drop_tx, drop_rx) = mpsc::channel(1);
     let (low_priority_tx, low_priority_rx) = mpsc::unbounded_channel();
     let (high_priority_tx, high_priority_rx) = mpsc::unbounded_channel();
 
     let state = Arc::new(model::AppState {
-        channels: model::Channels::new(&high_priority_tx, &low_priority_tx, &drop_tx),
+        channels: model::Channels::new(&high_priority_tx, &low_priority_tx),
         counters: model::Counters::new(),
         log: model::Log::new(),
         retry_count: c.retry_count,
@@ -72,7 +71,7 @@ async fn main() {
 
     tokio::spawn(async move {
         sender
-            .event_loop(drop_rx, high_priority_rx, low_priority_rx)
+            .event_loop(high_priority_rx, low_priority_rx)
             .await;
     });
 
