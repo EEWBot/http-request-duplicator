@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 mod http_handler;
 mod model;
 mod request_sender;
+mod negative_cache;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
@@ -33,6 +34,10 @@ pub struct Cli {
     #[clap(long, env)]
     #[clap(default_value_t = 5)]
     pub timeout: u64,
+
+    #[clap(long, env)]
+    #[clap(default_value_t = false)]
+    pub notfound_negative_cache: bool,
 }
 
 

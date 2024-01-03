@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::{RwLock, Arc};
 
 use axum::{
     extract::State,
     http::{header, HeaderMap, Method, StatusCode},
     response::{Html, IntoResponse},
-    routing::{any, get, post},
+    routing::{any, get},
     Json, Router,
 };
 use bytes::Bytes;

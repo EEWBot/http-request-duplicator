@@ -6,7 +6,10 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
 
-use crate::model::{self, Priority};
+use crate::{
+    model::{self, Priority},
+    negative_cache::NegativeCache,
+};
 
 struct RequestSenderInner {
     clients: Vec<reqwest::Client>,
@@ -14,6 +17,7 @@ struct RequestSenderInner {
     limiter: Arc<Semaphore>,
     state: Arc<model::AppState>,
     retry_delay: u64,
+    negcache_404: NegativeCache,
 }
 
 #[derive(Clone)]
@@ -44,6 +48,7 @@ impl RequestSender {
                 clients,
                 limiter: Arc::new(Semaphore::new(parallels)),
                 retry_delay,
+                negcache_404: NegativeCache::new(),
             }),
         }
     }
@@ -97,6 +102,10 @@ impl RequestSender {
     }
 
     async fn process_request(&self, ctx: model::RequestContext, p: Priority) {
+        if self.inner.negcache_404.is_banned(&ctx.target).await {
+            return;
+        }
+
         self.inner.state.counters.get(p).resolve();
         let permit = self.inner.limiter.clone().acquire_owned().await;
         let cloned_self = self.clone();
@@ -109,6 +118,10 @@ impl RequestSender {
                 }
                 Err(RequestError::HttpError(status)) => {
                     tracing::warn!("{status} when {}", ctx.target);
+
+                    if status == hyper::StatusCode::NOT_FOUND {
+                        cloned_self.inner.negcache_404.ban(&ctx.target).await;
+                    }
 
                     if status.is_client_error() {
                         cloned_self.inner.state.counters.get(p).failed();
