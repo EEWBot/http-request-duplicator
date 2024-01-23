@@ -1,18 +1,18 @@
 use std::net::SocketAddr;
-use std::sync::{RwLock, Arc};
+use std::sync::Arc;
 
 use axum::{
     extract::State,
-    http::{header, HeaderMap, Method, StatusCode},
-    response::{Html, IntoResponse},
+    http::{HeaderMap, Method, StatusCode},
+    response::Html,
     routing::{any, get},
     Json, Router,
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
-use crate::model::{self, Priority};
+use crate::duplicator::Priority;
+use crate::model::{self};
 
 async fn root() -> Html<&'static str> {
     Html("<h1>Http Request Duplicator</h1>")
@@ -25,8 +25,9 @@ struct DuplicateTargets {
 }
 
 #[derive(Serialize, Debug)]
+#[serde(tag = "type")]
 enum DuplicateResponse {
-    Ok,
+    EnqueuedNormally { id: String },
     Error,
 }
 
@@ -47,30 +48,19 @@ async fn duplicate(
     headers.remove("x-duplicate-targets");
     headers.remove("host");
 
-    let delayed_clone_objects =
-        Arc::new(RwLock::new(model::ReadonlySharedObjectsBetweenContexts {
+    use crate::duplicator::*;
+
+    let id = state.enqueuer.enqueue(
+        Payload {
+            body,
             headers,
             method,
-        }));
+        },
+        priority,
+        &targets.data,
+    );
 
-    let count = targets.data.len();
-    let high = state.counters.get(Priority::High).read_queue_count();
-    let low = state.counters.get(Priority::Low).read_queue_count();
-
-    for target in targets.data.into_iter() {
-        let context = model::RequestContext {
-            target,
-            readonly_objects: Arc::clone(&delayed_clone_objects),
-            body: body.clone(),
-            ttl: state.retry_count,
-        };
-
-        state.counters.get(priority).enqueue();
-        state.channels.get_queue(priority).send(context).unwrap();
-    }
-
-    tracing::info!("Enqueue {count}@{priority:?} [H:{high}, L:{low}]");
-    (StatusCode::ACCEPTED, Json(DuplicateResponse::Ok))
+    (StatusCode::ACCEPTED, Json(DuplicateResponse::EnqueuedNormally { id }))
 }
 
 async fn duplicate_low_priority(
@@ -91,27 +81,9 @@ async fn duplicate_high_priority(
     duplicate(state, method, headers, body, Priority::High).await
 }
 
-async fn metrics(State(state): State<Arc<model::AppState>>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json")],
-        json!(state.counters).to_string(),
-    )
-}
-
-async fn target_metrics(State(state): State<Arc<model::AppState>>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json")],
-        json!(state.log.read().await).to_string(),
-    )
-}
-
 pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hyper::Error> {
     let app = Router::new()
         .route("/", get(root))
-        .route("/metrics", get(metrics))
-        .route("/target_metrics", get(target_metrics))
         .route("/duplicate/high_priority", any(duplicate_high_priority))
         .route("/duplicate/low_priority", any(duplicate_low_priority))
         .with_state(state);

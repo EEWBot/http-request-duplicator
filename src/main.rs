@@ -3,12 +3,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use clap::Parser;
-use tokio::sync::mpsc;
 
+mod duplicator;
 mod http_handler;
 mod model;
-mod request_sender;
-mod negative_cache;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
@@ -40,7 +38,6 @@ pub struct Cli {
     pub notfound_negative_cache: bool,
 }
 
-
 fn create_client(timeout: u64) -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout))
@@ -50,35 +47,31 @@ fn create_client(timeout: u64) -> reqwest::Client {
         .unwrap()
 }
 
-
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let format = tracing_subscriber::fmt::format()
+        .with_level(true)
+        .with_target(false)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .compact();
+
+    tracing_subscriber::fmt().event_format(format).init();
 
     let c = Cli::parse();
 
-    let (low_priority_tx, low_priority_rx) = mpsc::unbounded_channel();
-    let (high_priority_tx, high_priority_rx) = mpsc::unbounded_channel();
-
-    let state = Arc::new(model::AppState {
-        channels: model::Channels::new(&high_priority_tx, &low_priority_tx),
-        counters: model::Counters::new(),
-        log: model::Log::new(),
-        retry_count: c.retry_count,
-    });
-
-    let sender = request_sender::RequestSender::new(
-        state.clone(),
-        (0..c.pool).map(|_| create_client(c.timeout)).collect(),
-        c.limiter,
-        c.retry_delay,
-    );
+    let (enqueuer, runner) =
+        duplicator::Builder::new((0..=10).map(|_| create_client(10)).collect())
+            .global_limit(c.limiter)
+            .retry_after(Duration::from_secs(c.retry_delay))
+            .ttl(c.retry_count)
+            .build();
 
     tokio::spawn(async move {
-        sender
-            .event_loop(high_priority_rx, low_priority_rx)
-            .await;
+        runner.event_loop().await;
     });
+
+    let state = Arc::new(model::AppState { enqueuer });
 
     http_handler::run(&c.listen, state).await.unwrap();
 }
