@@ -60,7 +60,10 @@ async fn duplicate(
         &targets.data,
     );
 
-    (StatusCode::ACCEPTED, Json(DuplicateResponse::EnqueuedNormally { id }))
+    (
+        StatusCode::ACCEPTED,
+        Json(DuplicateResponse::EnqueuedNormally { id }),
+    )
 }
 
 async fn duplicate_low_priority(

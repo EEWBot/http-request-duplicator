@@ -1,4 +1,5 @@
 use std::sync::{Arc, RwLock};
+use super::Priority;
 
 #[derive(Clone)]
 pub struct Payload {
@@ -26,6 +27,12 @@ pub struct Task {
     pub ttl: usize,
 }
 
+impl super::queue::Priorized for Task {
+    fn priority(&self) -> Priority {
+        self.context.read().unwrap().priority
+    }
+}
+
 impl Task {
     pub fn drain(mut self) -> Option<Self> {
         self.ttl -= 1;
@@ -36,10 +43,4 @@ impl Task {
 
         Some(self)
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Priority {
-    High,
-    Low,
 }

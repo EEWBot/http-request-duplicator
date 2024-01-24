@@ -5,7 +5,8 @@ use tokio::sync::Semaphore;
 use super::duplicator::{Enqueuer, InnerRunner, Runner};
 use super::load_balancer::LoadBalancer;
 use super::negative_cache::NegativeCache;
-use super::two_level_queue::two_level_queue;
+use super::model::Task;
+use super::queue::two_level_queue;
 
 pub struct Builder {
     clients: Vec<reqwest::Client>,
@@ -45,7 +46,7 @@ impl Builder {
 
     #[must_use]
     pub fn build(self) -> (Enqueuer, Runner) {
-        let (task_tx, task_rx) = two_level_queue();
+        let (task_tx, task_rx) = two_level_queue::<Task>();
 
         let enqueuer = Enqueuer::new(task_tx, self.ttl);
         let global_limit = Arc::new(Semaphore::new(self.global_limit));

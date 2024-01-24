@@ -1,19 +1,28 @@
-use super::model::{Priority, Task};
 use super::queue::{queue, QueueReceiver, QueueSender};
 
+#[derive(Clone, Copy, Debug)]
+pub enum Priority {
+    High,
+    Low
+}
+
+pub trait Priorized {
+    fn priority(&self) -> Priority;
+}
+
 #[derive(Clone)]
-pub(super) struct TwoLevelQueueSender {
-    high_priority: QueueSender<Task>,
-    low_priority: QueueSender<Task>,
+pub struct TwoLevelQueueSender<T> {
+    high_priority: QueueSender<T>,
+    low_priority: QueueSender<T>,
 }
 
-pub(super) struct TwoLevelQueueReceiver {
-    high_priority: QueueReceiver<Task>,
-    low_priority: QueueReceiver<Task>,
+pub struct TwoLevelQueueReceiver<T> {
+    high_priority: QueueReceiver<T>,
+    low_priority: QueueReceiver<T>,
 }
 
-impl TwoLevelQueueReceiver {
-    pub(super) async fn fetch(&mut self) -> Task {
+impl<T> TwoLevelQueueReceiver<T> {
+    pub async fn fetch(&mut self) -> T {
         let idle = self.high_priority.is_empty();
 
         tokio::select! {
@@ -29,19 +38,19 @@ impl TwoLevelQueueReceiver {
     }
 }
 
-impl TwoLevelQueueSender {
-    pub(super) fn enqueue(&self, t: Task) {
-        let p = t.context.read().unwrap().priority;
-        match p {
+impl<T: Priorized> TwoLevelQueueSender<T> {
+    pub fn enqueue(&self, t: T) {
+        match t.priority() {
             Priority::High => self.high_priority.enqueue(t),
             Priority::Low => self.low_priority.enqueue(t),
         }
     }
 }
 
-pub fn two_level_queue() -> (TwoLevelQueueSender, TwoLevelQueueReceiver) {
+pub fn two_level_queue<T>() -> (TwoLevelQueueSender<T>, TwoLevelQueueReceiver<T>) {
     let (high_tx, high_rx) = queue();
     let (low_tx, low_rx) = queue();
+
     (
         TwoLevelQueueSender {
             high_priority: high_tx,
