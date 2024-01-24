@@ -41,7 +41,7 @@ impl<T> QueueSender<T> {
     }
 }
 
-pub fn queue<T>() -> (QueueSender<T>, QueueReceiver<T>) {
+pub(super) fn queue<T>() -> (QueueSender<T>, QueueReceiver<T>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let shared = Arc::new(Shared { len: AtomicUsize::new(0) });
 
