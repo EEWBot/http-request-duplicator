@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use tokio::sync::Semaphore;
 
-use super::duplicator::{Enqueuer, InnerRunner, Runner};
+use super::processor::{Enqueuer, InnerRunner, Runner};
 use super::load_balancer::LoadBalancer;
 use super::negative_cache::NegativeCache;
 use super::model::Task;
-use super::queue::two_level_queue;
+use super::queue::priority_queue;
 
 pub struct Builder {
     clients: Vec<reqwest::Client>,
@@ -45,16 +45,18 @@ impl Builder {
     }
 
     #[must_use]
-    pub fn build(self) -> (Enqueuer, Runner) {
-        let (task_tx, task_rx) = two_level_queue::<Task>();
+    pub fn build(self) -> (Enqueuer, NegativeCache, Runner) {
+        let (task_tx, task_rx) = priority_queue::<Task>();
 
         let enqueuer = Enqueuer::new(task_tx, self.ttl);
         let global_limit = Arc::new(Semaphore::new(self.global_limit));
 
+        let negative_cache = NegativeCache::new();
+
         let runner = Runner::new(
             Arc::new(InnerRunner::new(
                 LoadBalancer::new(self.clients),
-                NegativeCache::new(),
+                negative_cache.clone(),
                 enqueuer.clone(),
                 self.retry_after,
             )),
@@ -62,6 +64,6 @@ impl Builder {
             task_rx,
         );
 
-        (enqueuer, runner)
+        (enqueuer, negative_cache, runner)
     }
 }

@@ -6,16 +6,16 @@ use tokio::sync::Semaphore;
 use super::load_balancer::LoadBalancer;
 use super::model::{Context, Payload, Task};
 use super::negative_cache::NegativeCache;
-use super::queue::{Priority, TwoLevelQueueSender, TwoLevelQueueReceiver};
+use super::queue::{Priority, PriorizedSender, PriorizedReceiver};
 
 #[derive(Clone)]
 pub struct Enqueuer {
-    task_tx: TwoLevelQueueSender<Task>,
+    task_tx: PriorizedSender<Task>,
     ttl: usize,
 }
 
 impl Enqueuer {
-    pub(super) fn new(task_tx: TwoLevelQueueSender<Task>, ttl: usize) -> Self {
+    pub(super) fn new(task_tx: PriorizedSender<Task>, ttl: usize) -> Self {
         Self { task_tx, ttl }
     }
 
@@ -77,14 +77,14 @@ impl InnerRunner {
 pub struct Runner {
     inner: Arc<InnerRunner>,
     global_limit: Arc<Semaphore>,
-    task_rx: TwoLevelQueueReceiver<Task>,
+    task_rx: PriorizedReceiver<Task>
 }
 
 impl Runner {
     pub(super) fn new(
         inner: Arc<InnerRunner>,
         global_limit: Arc<Semaphore>,
-        task_rx: TwoLevelQueueReceiver<Task>,
+        task_rx: PriorizedReceiver<Task>
     ) -> Self {
         Self {
             inner,

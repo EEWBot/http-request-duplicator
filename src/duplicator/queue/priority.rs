@@ -1,4 +1,4 @@
-use super::queue::{queue, QueueReceiver, QueueSender};
+use super::simple::{queue, Receiver, Sender};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Priority {
@@ -11,17 +11,17 @@ pub trait Priorized {
 }
 
 #[derive(Clone)]
-pub struct TwoLevelQueueSender<T> {
-    high_priority: QueueSender<T>,
-    low_priority: QueueSender<T>,
+pub struct PriorizedSender<T> {
+    high_priority: Sender<T>,
+    low_priority: Sender<T>,
 }
 
-pub struct TwoLevelQueueReceiver<T> {
-    high_priority: QueueReceiver<T>,
-    low_priority: QueueReceiver<T>,
+pub struct PriorizedReceiver<T> {
+    high_priority: Receiver<T>,
+    low_priority: Receiver<T>,
 }
 
-impl<T> TwoLevelQueueReceiver<T> {
+impl<T> PriorizedReceiver<T> {
     pub async fn fetch(&mut self) -> T {
         let idle = self.high_priority.is_empty();
 
@@ -38,7 +38,7 @@ impl<T> TwoLevelQueueReceiver<T> {
     }
 }
 
-impl<T: Priorized> TwoLevelQueueSender<T> {
+impl<T: Priorized> PriorizedSender<T> {
     pub fn enqueue(&self, t: T) {
         match t.priority() {
             Priority::High => self.high_priority.enqueue(t),
@@ -47,16 +47,16 @@ impl<T: Priorized> TwoLevelQueueSender<T> {
     }
 }
 
-pub fn two_level_queue<T>() -> (TwoLevelQueueSender<T>, TwoLevelQueueReceiver<T>) {
+pub fn priority_queue<T>() -> (PriorizedSender<T>, PriorizedReceiver<T>) {
     let (high_tx, high_rx) = queue();
     let (low_tx, low_rx) = queue();
 
     (
-        TwoLevelQueueSender {
+        PriorizedSender {
             high_priority: high_tx,
             low_priority: low_tx,
         },
-        TwoLevelQueueReceiver {
+        PriorizedReceiver {
             high_priority: high_rx,
             low_priority: low_rx,
         },

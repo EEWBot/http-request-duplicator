@@ -10,17 +10,17 @@ pub(super) struct Shared {
 }
 
 #[derive(Clone)]
-pub(super) struct QueueSender<T> {
+pub(super) struct Sender<T> {
     tx: UnboundedSender<T>,
     shared: Arc<Shared>,
 }
 
-pub(super) struct QueueReceiver<T> {
+pub(super) struct Receiver<T> {
     rx: UnboundedReceiver<T>,
     shared: Arc<Shared>,
 }
 
-impl<T> QueueReceiver<T> {
+impl<T> Receiver<T> {
     pub(super) async fn dequeue(&mut self) -> Option<T> {
         self.rx.recv().await
     }
@@ -34,19 +34,19 @@ impl<T> QueueReceiver<T> {
     }
 }
 
-impl<T> QueueSender<T> {
+impl<T> Sender<T> {
     pub(super) fn enqueue(&self, t: T) {
         self.shared.len.fetch_add(1, Relaxed);
         self.tx.send(t).unwrap();
     }
 }
 
-pub(super) fn queue<T>() -> (QueueSender<T>, QueueReceiver<T>) {
+pub(super) fn queue<T>() -> (Sender<T>, Receiver<T>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let shared = Arc::new(Shared { len: AtomicUsize::new(0) });
 
-    let sender_view = QueueSender { tx: tx.clone(), shared: shared.clone() };
-    let receiver_view = QueueReceiver { rx, shared: shared.clone() };
+    let sender_view = Sender { tx: tx.clone(), shared: shared.clone() };
+    let receiver_view = Receiver { rx, shared: shared.clone() };
 
     (sender_view, receiver_view)
 }

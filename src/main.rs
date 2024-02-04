@@ -60,7 +60,7 @@ async fn main() {
 
     let c = Cli::parse();
 
-    let (enqueuer, runner) =
+    let (enqueuer, negative_cache, runner) =
         duplicator::Builder::new((0..=10).map(|_| create_client(10)).collect())
             .global_limit(c.limiter)
             .retry_after(Duration::from_secs(c.retry_delay))
@@ -71,7 +71,7 @@ async fn main() {
         runner.event_loop().await;
     });
 
-    let state = Arc::new(model::AppState { enqueuer });
+    let state = Arc::new(model::AppState { enqueuer, negative_cache });
 
     http_handler::run(&c.listen, state).await.unwrap();
 }
