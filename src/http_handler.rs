@@ -11,7 +11,7 @@ use axum::{
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-use crate::model::{self};
+use crate::model;
 
 async fn root() -> Html<&'static str> {
     Html("<h1>Http Request Duplicator</h1>")
