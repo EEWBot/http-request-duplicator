@@ -42,7 +42,13 @@ fn create_client(timeout: u64) -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout))
         .http3_prior_knowledge()
+        .set_tls_enable_early_data(true)
+        .set_quic_max_idle_timeout(std::time::Duration::from_secs(30))
+        .set_quic_stream_receive_window(quinn_proto::VarInt::MAX)
+        .set_quic_receive_window(quinn_proto::VarInt::MAX)
+        .set_quic_send_window(u64::MAX)
         .brotli(true)
+        .trust_dns(true)
         .build()
         .unwrap()
 }
@@ -61,7 +67,7 @@ async fn main() {
     let c = Cli::parse();
 
     let (enqueuer, negative_cache, runner) =
-        duplicator::Builder::new((0..=10).map(|_| create_client(10)).collect())
+        duplicator::Builder::new((0..c.pool).map(|_| create_client(c.timeout)).collect())
             .global_limit(c.limiter)
             .retry_after(Duration::from_secs(c.retry_delay))
             .ttl(c.retry_count)
@@ -71,7 +77,10 @@ async fn main() {
         runner.event_loop().await;
     });
 
-    let state = Arc::new(model::AppState { enqueuer, negative_cache });
+    let state = Arc::new(model::AppState {
+        enqueuer,
+        negative_cache,
+    });
 
     http_handler::run(&c.listen, state).await.unwrap();
 }
