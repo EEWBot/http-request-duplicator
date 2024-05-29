@@ -9,10 +9,10 @@ jobs:
     name: runner / actionlint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.1
+      - uses: actions/checkout@v4.1.6
 
       - name: actionlint
-        uses: reviewdog/action-actionlint@v1.43.0
+        uses: reviewdog/action-actionlint@v1.45.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
