@@ -36,6 +36,7 @@ RUN RUSTFLAGS='--cfg reqwest_unstable' CARGO_BUILD_INCREMENTAL=true cargo build 
 
 FROM --platform=$TARGETPLATFORM alpine
 ARG NAME
+ENV NAME ${NAME}
 COPY --chown=root:root --from=builder /usr/src/${NAME}/CREDITS /usr/src/${NAME}/LICENSE /usr/share/licenses/${NAME}/
 COPY --chown=root:root --from=builder /usr/src/${NAME}/target/release/${NAME} /usr/bin/${NAME}
 CMD [ "/usr/bin/${NAME}" ]
