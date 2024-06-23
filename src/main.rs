@@ -48,7 +48,7 @@ fn create_client(timeout: u64) -> reqwest::Client {
         .set_quic_receive_window(quinn_proto::VarInt::MAX)
         .set_quic_send_window(u64::MAX)
         .brotli(true)
-        .trust_dns(true)
+        .hickory_dns(true)
         .build()
         .unwrap()
 }

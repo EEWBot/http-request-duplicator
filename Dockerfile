@@ -39,4 +39,4 @@ ARG NAME
 ENV NAME ${NAME}
 COPY --chown=root:root --from=builder /usr/src/${NAME}/CREDITS /usr/src/${NAME}/LICENSE /usr/share/licenses/${NAME}/
 COPY --chown=root:root --from=builder /usr/src/${NAME}/target/release/${NAME} /usr/bin/${NAME}
-CMD [ "/usr/bin/${NAME}" ]
+CMD [ "sh", "-c", "/usr/bin/${NAME}" ]
