@@ -41,4 +41,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ghcr.io/yanorei32/http-request-duplicator:${{ steps.create_tagname.outputs.TAG_NAME }}
+            ghcr.io/EEWBot/http-request-duplicator:${{ steps.create_tagname.outputs.TAG_NAME }}
