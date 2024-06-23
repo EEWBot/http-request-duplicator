@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::model;
 
 async fn root() -> Html<&'static str> {
-    Html("<h1>Http Request Duplicator</h1>")
+    Html("<h1>HTTP Request Duplicator</h1>")
 }
 
 #[derive(Deserialize, Debug)]
