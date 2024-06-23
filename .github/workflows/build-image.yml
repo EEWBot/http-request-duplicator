@@ -26,7 +26,7 @@ jobs:
           if [[ $TAG_NAME == "master" ]]; then
             echo "TAG_NAME=latest" >> "$GITHUB_OUTPUT" 
           elif [[ ${TAG_NAME:0:1} == "v" ]]; then
-            echo "TAG_NAME=${VERSION_NAME:1}" >> "$GITHUB_OUTPUT"
+            echo "TAG_NAME=${TAG_NAME:1}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and Push
