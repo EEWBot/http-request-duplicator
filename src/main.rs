@@ -34,6 +34,10 @@ pub struct Cli {
     pub timeout: u64,
 
     #[clap(long, env)]
+    #[clap(default_value = "Unspecified")]
+    pub identifier: String,
+
+    #[clap(long, env)]
     #[clap(default_value_t = false)]
     pub notfound_negative_cache: bool,
 }
@@ -82,5 +86,5 @@ async fn main() {
         negative_cache,
     });
 
-    http_handler::run(&c.listen, state).await.unwrap();
+    http_handler::run(&c.listen, state, &c.identifier).await.unwrap();
 }

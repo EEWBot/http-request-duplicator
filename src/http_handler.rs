@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use axum::{
     extract::State,
-    http::{HeaderMap, Method, StatusCode},
-    response::Html,
+    http::{HeaderMap, HeaderValue, Method, StatusCode},
+    middleware::map_response_with_state,
+    response::{Html, Response},
     routing::{any, get},
     Json, Router,
 };
@@ -123,7 +124,11 @@ async fn negative_cache_del(
     StatusCode::OK
 }
 
-pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hyper::Error> {
+pub async fn run(
+    s: &SocketAddr,
+    state: Arc<model::AppState>,
+    identifier: &str,
+) -> Result<(), hyper::Error> {
     let app = Router::new()
         .route("/", get(root))
         .route("/api/duplicate", any(duplicate))
@@ -131,6 +136,17 @@ pub async fn run(s: &SocketAddr, state: Arc<model::AppState>) -> Result<(), hype
             "/api/negative_cache",
             get(negative_cache).delete(negative_cache_del),
         )
+        .layer(map_response_with_state(
+            identifier.to_string(),
+            |State(identifier): State<String>, mut response: Response<_>| async {
+                response.headers_mut().insert(
+                    "x-identifier",
+                    HeaderValue::from_maybe_shared(identifier).unwrap(),
+                );
+
+                response
+            },
+        ))
         .with_state(state);
 
     axum::Server::bind(s).serve(app.into_make_service()).await
