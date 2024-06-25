@@ -19,17 +19,17 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y gcc-mingw-w64-x86-64
 
-      - uses: actions-rs/toolchain@v1.0.7
-        with:
-          toolchain: stable
-          components: clippy
-          override: true
-          target: x86_64-unknown-linux-gnu
+      - name: Get Rust toolchain
+        id: toolchain
+        run: |
+          awk -F'[ ="]+' '$1 == "channel" { print "toolchain=" $2 }' rust-toolchain >> "$GITHUB_OUTPUT"
 
-      - uses: actions-rs/toolchain@v1.0.7
+      - name: install clippy
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: x86_64-pc-windows-gnu
+          components: clippy
+          toolchain: ${{ steps.toolchain.outputs.toolchain }}
+          targets: x86_64-pc-windows-gnu
 
       - name: cache dependencies
         uses: Swatinem/rust-cache@v2.7.3
@@ -39,27 +39,17 @@ jobs:
            echo RUSTFLAGS='--cfg reqwest_unstable'  >> "$GITHUB_ENV"
 
       - name: clippy check
-        uses: actions-rs/clippy-check@v1.0.7
+        uses: sksat/action-clippy@v1.0.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+          reporter: github-check
 
       - name: install cargo-license
-        uses: actions-rs/cargo@v1.0.3
-        with:
-          command: install
-          args: cargo-license
-
-      - name: compile for unit test
-        uses: actions-rs/cargo@v1.0.3
-        with:
-          command: test
-          args: --no-run --locked
+        run: cargo install cargo-license
 
       - name: unit test
-        uses: actions-rs/cargo@v1.0.3
-        with:
-          command: test
+        run: |
+          cargo test --no-run --locked
+          cargo test
 
       - run: |
           cargo build --release --target x86_64-unknown-linux-gnu
