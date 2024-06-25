@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use clap::Parser;
+use tokio::net::TcpListener;
 
 mod duplicator;
 mod http_handler;
@@ -45,12 +46,12 @@ pub struct Cli {
 fn create_client(timeout: u64) -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout))
+        .tls_early_data(true)
         .http3_prior_knowledge()
-        .set_tls_enable_early_data(true)
-        .set_quic_max_idle_timeout(std::time::Duration::from_secs(30))
-        .set_quic_stream_receive_window(quinn_proto::VarInt::MAX)
-        .set_quic_receive_window(quinn_proto::VarInt::MAX)
-        .set_quic_send_window(u64::MAX)
+        .http3_max_idle_timeout(Duration::from_secs(30))
+        .http3_stream_receive_window(u64::MAX)
+        .http3_conn_receive_window(u64::MAX)
+        .http3_send_window(u64::MAX)
         .brotli(true)
         .hickory_dns(true)
         .build()
@@ -86,5 +87,6 @@ async fn main() {
         negative_cache,
     });
 
-    http_handler::run(&c.listen, state, &c.identifier).await.unwrap();
+    let listener = TcpListener::bind(c.listen).await.unwrap();
+    http_handler::run(listener, state, &c.identifier).await.unwrap();
 }

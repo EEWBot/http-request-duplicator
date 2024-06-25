@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
@@ -11,6 +10,7 @@ use axum::{
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use tokio::net::TcpListener;
 
 use crate::model;
 
@@ -125,10 +125,10 @@ async fn negative_cache_del(
 }
 
 pub async fn run(
-    s: &SocketAddr,
+    s: TcpListener,
     state: Arc<model::AppState>,
     identifier: &str,
-) -> Result<(), hyper::Error> {
+) -> Result<(), std::io::Error> {
     let app = Router::new()
         .route("/", get(root))
         .route("/api/duplicate", any(duplicate))
@@ -149,5 +149,5 @@ pub async fn run(
         ))
         .with_state(state);
 
-    axum::Server::bind(s).serve(app.into_make_service()).await
+    axum::serve(s, app.into_make_service()).await
 }
