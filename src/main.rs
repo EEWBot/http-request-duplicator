@@ -31,7 +31,7 @@ pub struct Cli {
     pub retry_delay: u64,
 
     #[clap(long, env)]
-    #[clap(default_value_t = 5)]
+    #[clap(default_value_t = 2)]
     pub timeout: u64,
 
     #[clap(long, env)]
@@ -45,14 +45,14 @@ pub struct Cli {
 
 fn create_client(timeout: u64) -> reqwest::Client {
     reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout))
-        .tls_early_data(true)
-        .http3_prior_knowledge()
-        .http3_max_idle_timeout(Duration::from_secs(30))
-        .http3_stream_receive_window(u64::MAX)
-        .http3_conn_receive_window(u64::MAX)
-        .http3_send_window(u64::MAX)
-        .brotli(true)
+        .read_timeout(Duration::from_secs(timeout))
+        .pool_max_idle_per_host(1)
+        .pool_idle_timeout(Duration::from_secs(6 * 60 * 60))
+        .http2_adaptive_window(true)
+        .http2_keep_alive_interval(Duration::from_secs(60))
+        .http2_keep_alive_while_idle(true)
+        .http2_keep_alive_timeout(Duration::from_secs(6 * 60 * 60))
+        .http2_prior_knowledge()
         .hickory_dns(true)
         .build()
         .unwrap()
@@ -67,7 +67,7 @@ async fn main() {
         .with_thread_names(false)
         .compact();
 
-    tracing_subscriber::fmt().event_format(format).init();
+    tracing_subscriber::fmt().event_format(format).with_max_level(tracing::Level::INFO).init();
 
     let c = Cli::parse();
 

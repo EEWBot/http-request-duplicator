@@ -107,8 +107,6 @@ impl Runner {
 
             let inner = self.inner.clone();
             tokio::spawn(async move {
-                let permit = permit;
-
                 let client = inner.lb_clients.fetch_next_ref();
                 let payl = task.context.read().unwrap().payload.clone();
 
@@ -118,8 +116,11 @@ impl Runner {
                     .request(payl.method, &task.target)
                     .headers(payl.headers)
                     .body(reqwest::Body::from(payl.body))
+                    .version(reqwest::Version::HTTP_2)
                     .send()
                     .await;
+
+                drop(permit);
 
                 let id = task.context.read().unwrap().id.to_string();
                 match result {
@@ -129,6 +130,7 @@ impl Runner {
                     }
                     Ok(resp) => {
                         let status = resp.status();
+                        drop(resp);
 
                         if !status.is_success() {
                             tracing::error!("{id} {status} when {}", task.target);
@@ -143,8 +145,6 @@ impl Runner {
                         }
                     }
                 }
-
-                drop(permit);
 
                 if !requeue {
                     return;
