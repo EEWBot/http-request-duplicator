@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     extract::State,
     http::{HeaderMap, HeaderValue, Method, StatusCode},
@@ -27,8 +25,6 @@ struct TargetUris {
 #[derive(Serialize, Debug)]
 enum ErrorReason {
     InvalidTargets,
-    InvalidPriority,
-    UnknownPriority,
 }
 
 #[derive(Serialize, Debug)]
@@ -39,7 +35,7 @@ enum DuplicateResponse {
 }
 
 async fn duplicate(
-    State(state): State<Arc<model::AppState>>,
+    State(state): State<model::AppState>,
     method: Method,
     mut headers: HeaderMap,
     body: Bytes,
@@ -56,43 +52,27 @@ async fn duplicate(
         );
     };
 
-    let Some(Ok(priority)) = headers.get("x-duplicate-priority").map(|v| v.to_str()) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(DuplicateResponse::Error {
-                reason: ErrorReason::InvalidPriority,
-            }),
-        );
-    };
+    let targets = targets.data;
 
-    let priority = match priority.to_ascii_lowercase().as_ref() {
-        "low" => Priority::Low,
-        "high" => Priority::High,
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(DuplicateResponse::Error {
-                    reason: ErrorReason::UnknownPriority,
-                }),
-            );
-        }
-    };
-
-    headers.remove("x-duplicate-priority");
     headers.remove("x-duplicate-targets");
     headers.remove("host");
 
     use crate::duplicator::*;
+    let id = ulid::Ulid::new().to_string();
 
-    let id = state.enqueuer.enqueue(
-        Payload {
+    tracing::info!("{} Enqueued", id);
+
+    state.duplicator.duplicate(
+        std::sync::Arc::new(Payload {
             body,
             headers,
             method,
-        },
-        priority,
-        &targets.data,
-    );
+            id: id.to_string(),
+        }),
+        targets,
+        2,
+    ).await;
+
 
     (
         StatusCode::ACCEPTED,
@@ -101,13 +81,13 @@ async fn duplicate(
 }
 
 async fn negative_cache(
-    State(state): State<Arc<model::AppState>>,
+    State(state): State<model::AppState>,
 ) -> (StatusCode, Json<Vec<String>>) {
-    (StatusCode::OK, Json(state.negative_cache.list().await))
+    (StatusCode::OK, Json(state.duplicator.banned().await))
 }
 
 async fn negative_cache_del(
-    State(state): State<Arc<model::AppState>>,
+    State(state): State<model::AppState>,
     headers: HeaderMap,
 ) -> StatusCode {
     let Some(Ok(Ok(targets))) = headers
@@ -117,16 +97,14 @@ async fn negative_cache_del(
         return StatusCode::BAD_REQUEST;
     };
 
-    for target in targets.data {
-        state.negative_cache.delete(&target).await;
-    }
+    state.duplicator.purge_banned_urls(targets.data).await;
 
     StatusCode::OK
 }
 
 pub async fn run(
     s: TcpListener,
-    state: Arc<model::AppState>,
+    state: model::AppState,
     identifier: &str,
 ) -> Result<(), std::io::Error> {
     let app = Router::new()

@@ -1,4 +1,4 @@
+#[derive(Clone)]
 pub struct AppState {
-    pub enqueuer: crate::duplicator::Enqueuer,
-    pub negative_cache: crate::duplicator::NegativeCache,
+    pub duplicator: crate::duplicator::Duplicator,
 }

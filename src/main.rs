@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
 use clap::Parser;
@@ -8,6 +7,8 @@ use tokio::net::TcpListener;
 mod duplicator;
 mod http_handler;
 mod model;
+
+use duplicator::Duplicator;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
@@ -21,14 +22,6 @@ pub struct Cli {
     #[clap(long, env)]
     #[clap(default_value_t = 1024)]
     pub limiter: usize,
-
-    #[clap(long, env)]
-    #[clap(default_value_t = 3)]
-    pub retry_count: usize,
-
-    #[clap(long, env)]
-    #[clap(default_value_t = 1)]
-    pub retry_delay: u64,
 
     #[clap(long, env)]
     #[clap(default_value_t = 2)]
@@ -71,21 +64,12 @@ async fn main() {
 
     let c = Cli::parse();
 
-    let (enqueuer, negative_cache, runner) =
-        duplicator::Builder::new((0..c.pool).map(|_| create_client(c.timeout)).collect())
-            .global_limit(c.limiter)
-            .retry_after(Duration::from_secs(c.retry_delay))
-            .ttl(c.retry_count)
-            .build();
+    let duplicator = 
+        Duplicator::new((0..c.pool).map(|_| create_client(c.timeout)).collect(), c.limiter);
 
-    tokio::spawn(async move {
-        runner.event_loop().await;
-    });
-
-    let state = Arc::new(model::AppState {
-        enqueuer,
-        negative_cache,
-    });
+    let state = model::AppState {
+        duplicator,
+    };
 
     let listener = TcpListener::bind(c.listen).await.unwrap();
     http_handler::run(listener, state, &c.identifier).await.unwrap();
