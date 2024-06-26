@@ -32,10 +32,6 @@ jobs:
       - name: cache dependencies
         uses: Swatinem/rust-cache@v2.7.3
 
-      - name: Set environment
-        run: |
-           echo RUSTFLAGS='--cfg reqwest_unstable'  >> "$GITHUB_ENV"
-
       - name: clippy check
         uses: sksat/action-clippy@v1.0.0
         with:

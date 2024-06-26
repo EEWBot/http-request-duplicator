@@ -22,7 +22,7 @@ COPY LICENSE .
 
 RUN mkdir -p src \
     && echo 'fn main() {}' > src/main.rs \
-    && RUSTFLAGS='--cfg reqwest_unstable' cargo build --release --target $(cat /arch)-unknown-linux-musl \
+    && cargo build --release --target $(cat /arch)-unknown-linux-musl \
     && cargo install cargo-license \
     && cargo license --authors \
         --do-not-bundle \
@@ -31,7 +31,7 @@ RUN mkdir -p src \
         --filter-platform $(cat /arch)-unknown-linux-musl > CREDITS
 
 COPY src src
-RUN RUSTFLAGS='--cfg reqwest_unstable' CARGO_BUILD_INCREMENTAL=true cargo build --release --target $(cat /arch)-unknown-linux-musl \
+RUN CARGO_BUILD_INCREMENTAL=true cargo build --release --target $(cat /arch)-unknown-linux-musl \
     && cp target/$(cat /arch)-unknown-linux-musl/release/${NAME} target/release/${NAME}
 
 FROM --platform=$TARGETPLATFORM alpine
