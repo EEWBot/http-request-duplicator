@@ -73,7 +73,6 @@ async fn duplicate(
         2,
     ).await;
 
-
     (
         StatusCode::ACCEPTED,
         Json(DuplicateResponse::EnqueuedNormally { id }),

@@ -47,11 +47,12 @@ fn create_client(timeout: u64) -> reqwest::Client {
         .http2_keep_alive_timeout(Duration::from_secs(6 * 60 * 60))
         .http2_prior_knowledge()
         .hickory_dns(true)
+        .use_rustls_tls()
         .build()
         .unwrap()
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 64)]
 async fn main() {
     let format = tracing_subscriber::fmt::format()
         .with_level(true)
