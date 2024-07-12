@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.8
+# syntax=docker/dockerfile:1.9
 ARG NAME=http-request-duplicator
 
 FROM --platform=$BUILDPLATFORM messense/rust-musl-cross:${TARGETARCH}-musl as builder
